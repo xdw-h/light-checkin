@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { dateKey, shiftDay, toKg, toDisplay, validateBackup, freshState, weekStats, mutateState } from '../src/core.js';
+assert.equal(dateKey(new Date(2026,10,17,0,1)), '2026-11-17');
+assert.equal(shiftDay('2026-03-01',-1),'2026-02-28');
+assert.equal(toKg(145,'jin'),72.5);
+assert.equal(toDisplay(72.5,'jin'),145);
+let s=freshState();s.profile.startDate='2026-11-17';
+s.records={'2026-11-17':{weight:72,checks:{},minutes:0,sleep:null,note:''},'2026-11-11':{weight:74,checks:{},minutes:0,sleep:null,note:''},'2026-11-10':{weight:76,checks:{},minutes:0,sleep:null,note:''}};
+assert.deepEqual(weekStats(s.records,'2026-11-17'),{average:73,previous:76,change:-3,count:2});
+assert.equal(validateBackup(JSON.parse(JSON.stringify(s)),'2026-11-17').records['2026-11-17'].weight,72);
+for(const bad of [null,{}, {...s,version:99},{...s,records:{'2026-02-30':{}}},{...s,records:{'2026-11-18':{}}},{...s,profile:{...s.profile,target:NaN}},{...s,records:{'2026-11-17':{weight:-1}}}]) assert.throws(()=>validateBackup(bad,'2026-11-17'));
+assert.equal(validateBackup({...freshState(),profile:{...freshState().profile,startDate:'2026-11-17'}},'2026-11-17').version,1);
+console.log('核心验证通过：日期、换算、周均、有效备份及7类无效备份');
+
+let stored=JSON.stringify(s);const memory={getItem:()=>stored,setItem:(key,v)=>{stored=v;}};
+mutateState(memory,x=>{x.records['2026-11-16']={weight:71,checks:{},minutes:0,sleep:null,note:''};});
+mutateState(memory,x=>{x.profile.unit='kg';});
+assert.equal(JSON.parse(stored).records['2026-11-16'].weight,71);
+assert.equal(JSON.parse(stored).profile.unit,'kg');
+const before=stored;assert.throws(()=>mutateState({getItem:()=>stored,setItem:()=>{throw Error('quota');}},x=>{x.profile.unit='jin';}));assert.equal(stored,before);
+console.log('写入验证通过：读最新状态合并修改、写入失败不覆盖');
